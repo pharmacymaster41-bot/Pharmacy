@@ -1,0 +1,724 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sehat Pharmacy Manager</title>
+<style>
+  :root{
+    --teal-dark:#0F3D3A;
+    --teal:#1B5C56;
+    --teal-hover:#164B46;
+    --orange:#D97B3E;
+    --orange-hover:#C4692F;
+    --bg:#F7F5F1;
+    --card-border:#E4DFD3;
+    --row-border:#F0EDE5;
+    --text:#1E2A28;
+    --muted:#7A8783;
+    --red:#B3261E;
+    --red-bg:#FBEAE9;
+    --amber:#8A5A00;
+    --amber-bg:#FFF3D6;
+    --green:#166A5D;
+    --green-bg:#E7F5F1;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    font-family:'Segoe UI', Tahoma, Arial, sans-serif;
+    background:var(--bg);
+    color:var(--text);
+  }
+  header{
+    background:var(--teal-dark);
+    color:#fff;
+    padding:18px 20px;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    flex-wrap:wrap;
+    gap:10px;
+  }
+  header .brand{ display:flex; align-items:center; gap:12px; }
+  header .brand .icon{
+    width:40px;height:40px;border-radius:10px;background:var(--teal);
+    display:flex;align-items:center;justify-content:center;font-size:20px;
+  }
+  header h1{ font-size:18px; margin:0; font-weight:600; }
+  header p{ font-size:12px; margin:2px 0 0; color:#9FC5BE; }
+  .print-btn{
+    background:var(--orange); color:#fff; border:none; padding:10px 16px;
+    border-radius:8px; font-size:14px; font-weight:500; cursor:pointer;
+    display:flex; align-items:center; gap:8px;
+  }
+  .print-btn:hover{ background:var(--orange-hover); }
+  .container{ max-width:900px; margin:0 auto; padding:0 20px 60px; }
+  .stats{ display:grid; grid-template-columns:repeat(2,1fr); gap:12px; margin-top:24px; }
+  @media (min-width:560px){ .stats{ grid-template-columns:repeat(4,1fr); } }
+  .stat-card{
+    background:#fff; border:1px solid var(--card-border); border-radius:12px; padding:16px;
+  }
+  .stat-card p.label{ font-size:12px; color:var(--muted); margin:0 0 6px; }
+  .stat-card p.value{ font-size:24px; font-weight:600; margin:0; }
+  .stat-card p.value.red{ color:var(--red); }
+  .tabs{ display:flex; gap:8px; margin-top:24px; }
+  .tab-btn{
+    padding:10px 18px; border-radius:10px 10px 0 0; font-size:14px; font-weight:500;
+    background:transparent; border:1px solid transparent; color:var(--muted); cursor:pointer;
+  }
+  .tab-btn.active{
+    background:#fff; border:1px solid var(--card-border); border-bottom-color:#fff; color:var(--text);
+  }
+  .panel{
+    background:#fff; border:1px solid var(--card-border); border-radius:0 12px 12px 12px; padding:24px;
+  }
+  .field{ margin-bottom:16px; }
+  .field label{ display:block; font-size:14px; font-weight:500; margin-bottom:6px; }
+  .field input, .field select{
+    width:100%; border:1px solid #DAD4C8; border-radius:8px; padding:10px 12px; font-size:14px; outline:none;
+  }
+  .field input:focus{ border-color:var(--teal); }
+  .row-2{ display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+  .btn-primary{
+    background:var(--teal); color:#fff; border:none; padding:11px 20px; border-radius:8px;
+    font-size:14px; font-weight:500; cursor:pointer; display:inline-flex; align-items:center; gap:8px;
+  }
+  .btn-primary:hover{ background:var(--teal-hover); }
+  .error-box{
+    background:var(--red-bg); color:var(--red); font-size:13px; padding:10px 12px; border-radius:8px; margin-bottom:14px;
+  }
+  .toolbar{
+    display:flex; gap:10px; flex-wrap:wrap; align-items:center; padding-bottom:16px; margin-bottom:0;
+    border-bottom:1px solid var(--card-border);
+  }
+  .search-box{
+    display:flex; align-items:center; gap:8px; border:1px solid #DAD4C8; border-radius:8px; padding:8px 12px; flex:1; min-width:180px;
+  }
+  .search-box input{ border:none; outline:none; font-size:14px; width:100%; }
+  select.sort-select{
+    border:1px solid #DAD4C8; border-radius:8px; padding:8px 12px; font-size:14px; outline:none; background:#fff;
+  }
+  table{ width:100%; border-collapse:collapse; font-size:14px; margin-top:12px;}
+  thead th{ text-align:left; color:var(--muted); font-weight:500; font-size:13px; padding:10px 8px; border-bottom:1px solid var(--card-border); }
+  tbody td{ padding:12px 8px; border-bottom:1px solid var(--row-border); vertical-align:middle; }
+  tbody tr:last-child td{ border-bottom:none; }
+  .prod-name{ font-weight:500; }
+  .prod-batch{ font-size:12px; color:var(--muted); margin-top:2px; }
+  .badge{ font-size:12px; font-weight:500; padding:4px 10px; border-radius:999px; display:inline-block; }
+  .actions{ display:flex; justify-content:flex-end; gap:8px; }
+  .btn-sell{
+    display:flex; align-items:center; gap:6px; font-size:12px; background:var(--teal-dark); color:#fff;
+    border:none; padding:7px 12px; border-radius:8px; cursor:pointer;
+  }
+  .btn-sell:disabled{ opacity:.4; cursor:not-allowed; }
+  .btn-sell:hover:not(:disabled){ background:#0A2E2B; }
+  .btn-del{
+    color:var(--red); background:none; border:none; padding:7px; border-radius:8px; cursor:pointer;
+  }
+  .btn-del:hover{ background:var(--red-bg); }
+  .empty-state{ text-align:center; color:var(--muted); font-size:14px; padding:50px 10px; }
+  .modal-overlay{
+    position:fixed; inset:0; background:rgba(0,0,0,.4); display:none; align-items:center; justify-content:center; z-index:50; padding:16px;
+  }
+  .modal-overlay.open{ display:flex; }
+  .modal{ background:#fff; border-radius:12px; padding:24px; width:100%; max-width:380px; }
+  .modal h3{ margin:0 0 4px; font-size:16px; font-weight:600; }
+  .modal .sub{ font-size:12px; color:var(--muted); margin:0 0 16px; }
+  .modal-actions{ display:flex; gap:10px; margin-top:16px; }
+  .modal-actions button{ flex:1; padding:10px; border-radius:8px; font-weight:500; font-size:14px; cursor:pointer; }
+  .btn-confirm{ background:var(--teal); color:#fff; border:none; }
+  .btn-confirm:hover{ background:var(--teal-hover); }
+  .btn-cancel{ background:#fff; border:1px solid #DAD4C8; }
+  #tableWrap, #billTableWrap{ overflow-x:auto; }
+  .cart-qty-input{ width:70px; border:1px solid #DAD4C8; border-radius:6px; padding:6px 8px; font-size:13px; }
+  .bill-total-row{ font-weight:600; background:#F7F5F1; }
+  .bill-name-field{ max-width:280px; margin-bottom:16px; }
+</style>
+</head>
+<body>
+
+<!-- LOCK SCREEN -->
+<div id="lockScreen" style="position:fixed;inset:0;background:var(--teal-dark);display:flex;align-items:center;justify-content:center;z-index:999;padding:20px;">
+  <div style="background:#fff;border-radius:14px;padding:32px 28px;width:100%;max-width:340px;text-align:center;">
+    <div style="width:56px;height:56px;border-radius:14px;background:var(--teal);display:flex;align-items:center;justify-content:center;font-size:26px;margin:0 auto 16px;">🔒</div>
+    <h2 style="margin:0 0 6px;font-size:18px;color:var(--text);">Sehat Pharmacy Manager</h2>
+    <p style="margin:0 0 20px;font-size:13px;color:var(--muted);">Enter PIN to continue</p>
+    <input type="password" id="lockPinInput" placeholder="Enter PIN" style="width:100%;border:1px solid #DAD4C8;border-radius:8px;padding:12px;font-size:15px;outline:none;text-align:center;margin-bottom:12px;" onkeydown="if(event.key==='Enter') checkLockPin()">
+    <p id="lockError" style="display:none;color:var(--red);font-size:13px;margin:0 0 12px;">Incorrect PIN. Try again.</p>
+    <button class="btn-primary" style="width:100%;justify-content:center;" onclick="checkLockPin()">Unlock</button>
+  </div>
+</div>
+
+<div id="appRoot" style="display:none;">
+
+<header>
+  <div class="brand">
+    <div class="icon">💊</div>
+    <div>
+      <h1>Sehat Pharmacy Manager</h1>
+      <p>Stock, Sales &amp; Expiry Management</p>
+    </div>
+  </div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;">
+    <button class="print-btn" style="background:#3E6E7A;" onclick="exportBackup()">⬇️ Save Backup</button>
+    <label class="print-btn" for="importFile" style="background:#3E6E7A;margin:0;">⬆️ Load Backup</label>
+    <input type="file" id="importFile" accept=".json,application/json" style="position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0;" onchange="importBackup(event)">
+    <button class="print-btn" style="background:#3E6E7A;" onclick="pasteBackup()">📋 Paste Backup</button>
+    <button class="print-btn" onclick="printInventory()">🖨️ Print</button>
+  </div>
+</header>
+
+<div class="container">
+
+  <div class="stats">
+    <div class="stat-card">
+      <p class="label">Total Products</p>
+      <p class="value" id="statTotalProducts">0</p>
+    </div>
+    <div class="stat-card">
+      <p class="label">Total Quantity</p>
+      <p class="value" id="statTotalQty">0</p>
+    </div>
+    <div class="stat-card">
+      <p class="label">Expiring Soon</p>
+      <p class="value red" id="statNearExpiry">0</p>
+    </div>
+    <div class="stat-card">
+      <p class="label">Low Stock</p>
+      <p class="value red" id="statLowStock">0</p>
+    </div>
+  </div>
+
+  <div class="tabs">
+    <button class="tab-btn active" id="tabInventoryBtn" onclick="switchTab('inventory')">Inventory</button>
+    <button class="tab-btn" id="tabAddBtn" onclick="switchTab('add')">Add Product</button>
+    <button class="tab-btn" id="tabBillBtn" onclick="switchTab('bill')">Sell Products</button>
+  </div>
+
+  <!-- ADD PRODUCT PANEL -->
+  <div class="panel" id="addPanel" style="display:none;">
+    <div class="error-box" id="addError" style="display:none;"></div>
+    <form id="addForm" onsubmit="return addProduct(event)">
+      <div class="field">
+        <label>Product Name</label>
+        <input type="text" id="fName" placeholder="e.g. Panadol 500mg">
+      </div>
+      <div class="row-2">
+        <div class="field">
+          <label>Quantity</label>
+          <input type="number" id="fQty" placeholder="e.g. 50">
+        </div>
+        <div class="field">
+          <label>Expiry Date</label>
+          <input type="date" id="fExpiry">
+        </div>
+      </div>
+      <div class="row-2">
+        <div class="field">
+          <label>Price (optional)</label>
+          <input type="number" id="fPrice" placeholder="Rs.">
+        </div>
+        <div class="field">
+          <label>Batch No. (optional)</label>
+          <input type="text" id="fBatch">
+        </div>
+      </div>
+      <div class="field">
+        <label>Low Stock Limit (optional)</label>
+        <input type="number" id="fLowStock" placeholder="e.g. 10 (default: 10)">
+      </div>
+      <button type="submit" class="btn-primary">➕ Add Product</button>
+    </form>
+  </div>
+
+  <!-- INVENTORY PANEL -->
+  <div class="panel" id="inventoryPanel">
+    <div class="toolbar">
+      <div class="search-box">
+        🔎 <input type="text" id="searchInput" placeholder="Search products..." oninput="renderTable()">
+      </div>
+      <select class="sort-select" id="sortSelect" onchange="renderTable()">
+        <option value="expiry">Sort by Expiry</option>
+        <option value="name">Sort by Name</option>
+        <option value="quantity">Sort by Quantity</option>
+      </select>
+    </div>
+    <div id="tableWrap"></div>
+  </div>
+
+  <!-- BILL PANEL -->
+  <div class="panel" id="billPanel" style="display:none;">
+    <div class="error-box" id="billError" style="display:none;"></div>
+    <div class="toolbar">
+      <div class="search-box">
+        🔎 <input type="text" id="billSearchInput" placeholder="Search products..." oninput="renderBillPanel()">
+      </div>
+    </div>
+    <div id="billTableWrap"></div>
+    <button class="btn-primary" style="margin-top:18px;" onclick="sellBillAndPrint()">🛒 Sell Selected Products</button>
+  </div>
+
+</div>
+
+<!-- SELL MODAL -->
+<div class="modal-overlay" id="sellModal">
+  <div class="modal">
+    <h3 id="sellModalTitle">Sell Product</h3>
+    <p class="sub" id="sellModalStock"></p>
+    <div class="error-box" id="sellError" style="display:none;"></div>
+    <input type="number" id="sellQtyInput" placeholder="How much quantity to sell?" style="width:100%;border:1px solid #DAD4C8;border-radius:8px;padding:10px 12px;font-size:14px;outline:none;">
+    <div class="modal-actions">
+      <button class="btn-confirm" onclick="confirmSell()">Confirm</button>
+      <button class="btn-cancel" onclick="closeSellModal()">Cancel</button>
+    </div>
+  </div>
+</div>
+
+</div>
+
+<script>
+  // ---- Lock Screen ----
+  const APP_PIN = 'Ahsan';
+  function checkLockPin(){
+    const input = document.getElementById('lockPinInput');
+    const errBox = document.getElementById('lockError');
+    if(input.value === APP_PIN){
+      document.getElementById('lockScreen').style.display = 'none';
+      document.getElementById('appRoot').style.display = 'block';
+      sessionStorage.setItem('pharmacy_unlocked', '1');
+    } else {
+      errBox.style.display = 'block';
+      input.value = '';
+      input.focus();
+    }
+  }
+  if(sessionStorage.getItem('pharmacy_unlocked') === '1'){
+    document.getElementById('lockScreen').style.display = 'none';
+    document.getElementById('appRoot').style.display = 'block';
+  }
+
+  let products = [];
+  let currentTab = 'inventory';
+  let sellTargetId = null;
+
+  // ---- Persistence ----
+  function loadProducts(){
+    try{
+      const raw = localStorage.getItem('pharmacy_products');
+      products = raw ? JSON.parse(raw) : [];
+    }catch(e){ products = []; }
+  }
+  function saveProducts(){
+    localStorage.setItem('pharmacy_products', JSON.stringify(products));
+  }
+
+  // ---- Helpers ----
+  function todayISO(){ return new Date().toISOString().slice(0,10); }
+
+  function daysUntil(dateStr){
+    const today = new Date(); today.setHours(0,0,0,0);
+    const target = new Date(dateStr); target.setHours(0,0,0,0);
+    return Math.round((target - today) / 86400000);
+  }
+
+  function expiryStatus(dateStr){
+    const d = daysUntil(dateStr);
+    if(d < 0) return { label:'Expired', cls:'red' };
+    if(d <= 30) return { label:d + ' days left', cls:'amber' };
+    return { label:d + ' days left', cls:'green' };
+  }
+
+  function badgeStyle(cls){
+    if(cls==='red') return 'color:var(--red);background:var(--red-bg);';
+    if(cls==='amber') return 'color:var(--amber);background:var(--amber-bg);';
+    return 'color:var(--green);background:var(--green-bg);';
+  }
+
+  function escapeHtml(str){
+    return String(str).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+  }
+
+  // ---- Tabs ----
+  function switchTab(tab){
+    currentTab = tab;
+    document.getElementById('tabInventoryBtn').classList.toggle('active', tab==='inventory');
+    document.getElementById('tabAddBtn').classList.toggle('active', tab==='add');
+    document.getElementById('tabBillBtn').classList.toggle('active', tab==='bill');
+    document.getElementById('inventoryPanel').style.display = tab==='inventory' ? 'block' : 'none';
+    document.getElementById('addPanel').style.display = tab==='add' ? 'block' : 'none';
+    document.getElementById('billPanel').style.display = tab==='bill' ? 'block' : 'none';
+    if(tab === 'bill') renderBillPanel();
+  }
+
+  // ---- Add Product ----
+  function addProduct(e){
+    e.preventDefault();
+    const errBox = document.getElementById('addError');
+    errBox.style.display = 'none';
+
+    const name = document.getElementById('fName').value.trim();
+    const qtyRaw = document.getElementById('fQty').value;
+    const expiry = document.getElementById('fExpiry').value;
+    const priceRaw = document.getElementById('fPrice').value;
+    const batch = document.getElementById('fBatch').value.trim();
+    const lowStockRaw = document.getElementById('fLowStock').value;
+
+    if(!name || !qtyRaw || !expiry){
+      errBox.textContent = 'Name, Quantity and Expiry Date are required.';
+      errBox.style.display = 'block';
+      return false;
+    }
+    const qty = parseInt(qtyRaw, 10);
+    if(isNaN(qty) || qty < 0){
+      errBox.textContent = 'Quantity must be a valid number.';
+      errBox.style.display = 'block';
+      return false;
+    }
+    let lowStock = lowStockRaw ? parseInt(lowStockRaw, 10) : 10;
+    if(isNaN(lowStock) || lowStock < 0) lowStock = 10;
+
+    products.push({
+      id: Date.now().toString(36) + Math.random().toString(36).slice(2,6),
+      name, quantity: qty, expiry,
+      price: priceRaw ? parseFloat(priceRaw) : null,
+      batch,
+      lowStock
+    });
+    saveProducts();
+
+    document.getElementById('addForm').reset();
+    switchTab('inventory');
+    renderAll();
+    return false;
+  }
+
+  function deleteProduct(id){
+    products = products.filter(p => p.id !== id);
+    saveProducts();
+    renderAll();
+  }
+
+  // ---- Sell ----
+  function openSell(id){
+    sellTargetId = id;
+    const p = products.find(x => x.id === id);
+    document.getElementById('sellModalTitle').textContent = 'Sell ' + p.name;
+    document.getElementById('sellModalStock').textContent = 'In stock: ' + p.quantity + ' units';
+    document.getElementById('sellQtyInput').value = '';
+    document.getElementById('sellError').style.display = 'none';
+    document.getElementById('sellModal').classList.add('open');
+    document.getElementById('sellQtyInput').focus();
+  }
+  function closeSellModal(){
+    document.getElementById('sellModal').classList.remove('open');
+    sellTargetId = null;
+  }
+  function confirmSell(){
+    const p = products.find(x => x.id === sellTargetId);
+    if(!p) return;
+    const errBox = document.getElementById('sellError');
+    const qty = parseInt(document.getElementById('sellQtyInput').value, 10);
+    if(isNaN(qty) || qty <= 0){
+      errBox.textContent = 'Enter a valid quantity.';
+      errBox.style.display = 'block';
+      return;
+    }
+    if(qty > p.quantity){
+      errBox.textContent = 'Only ' + p.quantity + ' units in stock.';
+      errBox.style.display = 'block';
+      return;
+    }
+    p.quantity -= qty;
+    saveProducts();
+    closeSellModal();
+    renderAll();
+    printReceipt([{ name: p.name, qty: qty, price: p.price }]);
+  }
+
+  // ---- Receipt Printing ----
+  // ---- Download HTML file helper ----
+  function downloadHtmlFile(filename, htmlContent){
+    const blob = new Blob([htmlContent], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  function printReceipt(items){
+    let rowsHtml = '';
+    let total = 0;
+    let hasPrice = false;
+    items.forEach((item, i) => {
+      const price = (item.price !== null && item.price !== undefined) ? item.price : null;
+      const subtotal = price !== null ? price * item.qty : null;
+      if(price !== null){ hasPrice = true; total += subtotal; }
+      rowsHtml += '<tr>';
+      rowsHtml += '<td>'+(i+1)+'</td>';
+      rowsHtml += '<td>'+escapeHtml(item.name)+'</td>';
+      rowsHtml += '<td style="text-align:right;">'+item.qty+'</td>';
+      rowsHtml += '<td style="text-align:right;">'+(price!==null ? price.toFixed(2) : '-')+'</td>';
+      rowsHtml += '<td style="text-align:right;">'+(subtotal!==null ? subtotal.toFixed(2) : '-')+'</td>';
+      rowsHtml += '</tr>';
+    });
+    const totalText = hasPrice ? ('Rs. ' + total.toFixed(2)) : '-';
+
+    const html = '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Sales Receipt</title>' +
+      '<style>' +
+      'body{font-family:Arial,sans-serif;padding:24px;color:#1E2A28;}' +
+      'h1{font-size:20px;margin:0 0 2px;}' +
+      '.sub{font-size:12px;color:#555;margin:0 0 4px;}' +
+      'table{width:100%;border-collapse:collapse;font-size:13px;margin-top:16px;}' +
+      'th{text-align:left;border-bottom:2px solid #000;padding:6px 4px;}' +
+      'td{border-bottom:1px solid #ccc;padding:6px 4px;}' +
+      'tfoot td{font-weight:600;border-bottom:none;}' +
+      '</style></head><body>' +
+      '<h1>Sehat Pharmacy</h1>' +
+      '<p class="sub">Sales Receipt</p>' +
+      '<p class="sub">Date: '+todayISO()+'&nbsp;&nbsp;&nbsp;Time: '+new Date().toLocaleTimeString()+'</p>' +
+      '<table><thead><tr><th>#</th><th>Product</th><th style="text-align:right;">Qty</th><th style="text-align:right;">Price</th><th style="text-align:right;">Subtotal</th></tr></thead>' +
+      '<tbody>'+rowsHtml+'</tbody>' +
+      '<tfoot><tr><td colspan="4" style="text-align:right;">Total</td><td style="text-align:right;">'+totalText+'</td></tr></tfoot>' +
+      '</table></body></html>';
+
+    const win = window.open('', '_blank');
+    if(!win){
+      alert('Please allow pop-ups for this page so the receipt can print.');
+      return;
+    }
+    win.document.open();
+    win.document.write(html);
+    win.document.close();
+    win.focus();
+    setTimeout(function(){ win.print(); }, 300);
+
+    downloadHtmlFile('receipt-' + todayISO() + '-' + Date.now() + '.html', html);
+  }
+
+  // ---- Backup Export / Import ----
+  function exportBackup(){
+    const dataStr = JSON.stringify(products, null, 2);
+    const blob = new Blob([dataStr], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const stamp = todayISO();
+    a.href = url;
+    a.download = 'pharmacy-backup-' + stamp + '.json';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  function processBackupData(imported){
+    if(!Array.isArray(imported)) throw new Error('invalid format');
+    const proceed = confirm(
+      'This backup contains ' + imported.length + ' products.\n\n' +
+      'Press OK: Merge backup into the current list (add).\n' +
+      'Press Cancel: Replace the current list with the backup.'
+    );
+    if(proceed){
+      const existingIds = new Set(products.map(p => p.id));
+      imported.forEach(p => { if(!existingIds.has(p.id)) products.push(p); });
+    } else {
+      products = imported;
+    }
+    saveProducts();
+    renderAll();
+    alert('Backup loaded successfully.');
+  }
+
+  function importBackup(event){
+    const file = event.target.files[0];
+    if(!file) return;
+    const reader = new FileReader();
+    reader.onload = function(e){
+      try{
+        processBackupData(JSON.parse(e.target.result));
+      }catch(err){
+        alert('This file is not in a valid backup format.');
+      }
+      event.target.value = '';
+    };
+    reader.readAsText(file);
+  }
+
+  function pasteBackup(){
+    const text = prompt('Paste the full contents of your backup .json file here:');
+    if(text === null || text.trim() === '') return;
+    try{
+      processBackupData(JSON.parse(text));
+    }catch(err){
+      alert('This text is not in a valid backup format.');
+    }
+  }
+
+  // ---- Bill / Multi-Sell ----
+  let cartQuantities = {};
+
+  function renderBillPanel(){
+    const wrap = document.getElementById('billTableWrap');
+    const search = document.getElementById('billSearchInput').value.toLowerCase();
+    const list = products.filter(p => p.name.toLowerCase().includes(search));
+
+    if(products.length === 0){
+      wrap.innerHTML = '<div class="empty-state">No products yet. Add one from the "Add Product" tab first.</div>';
+      return;
+    }
+    if(list.length === 0){
+      wrap.innerHTML = '<div class="empty-state">No products found.</div>';
+      return;
+    }
+    let html = '<table><thead><tr><th>Name</th><th>Stock</th><th>Sell Qty</th></tr></thead><tbody>';
+    list.forEach(p => {
+      const savedQty = cartQuantities[p.id] || 0;
+      html += '<tr>';
+      html += '<td><div class="prod-name">'+escapeHtml(p.name)+'</div></td>';
+      html += '<td>'+p.quantity+'</td>';
+      html += '<td><input type="number" class="cart-qty-input" min="0" max="'+p.quantity+'" value="'+savedQty+'" id="cartQty_'+p.id+'" onchange="cartQuantities[\''+p.id+'\']=this.value" '+(p.quantity===0?'disabled':'')+'></td>';
+      html += '</tr>';
+    });
+    html += '</tbody></table>';
+    wrap.innerHTML = html;
+  }
+
+  function sellBillAndPrint(){
+    const errBox = document.getElementById('billError');
+    errBox.style.display = 'none';
+
+    const items = [];
+    for(const p of products){
+      const qty = parseInt(cartQuantities[p.id], 10);
+      if(!qty || qty <= 0) continue;
+      if(qty > p.quantity){
+        errBox.textContent = 'Only ' + p.quantity + ' in stock for ' + p.name + '.';
+        errBox.style.display = 'block';
+        return;
+      }
+      items.push({ id: p.id, name: p.name, qty, price: p.price });
+    }
+
+    if(items.length === 0){
+      errBox.textContent = 'Enter a quantity for at least one product.';
+      errBox.style.display = 'block';
+      return;
+    }
+
+    // deduct stock
+    items.forEach(item => {
+      const p = products.find(x => x.id === item.id);
+      if(p) p.quantity -= item.qty;
+    });
+    saveProducts();
+
+    cartQuantities = {};
+    renderAll();
+    renderBillPanel();
+    printReceipt(items);
+  }
+
+  function printInventory(){
+    const sorted = [...products].sort((a,b) => new Date(a.expiry) - new Date(b.expiry));
+    let rowsHtml = '';
+    sorted.forEach((p,i) => {
+      const st = expiryStatus(p.expiry);
+      rowsHtml += '<tr>';
+      rowsHtml += '<td>'+(i+1)+'</td>';
+      rowsHtml += '<td>'+escapeHtml(p.name)+'</td>';
+      rowsHtml += '<td>'+p.quantity+'</td>';
+      rowsHtml += '<td>'+p.expiry+'</td>';
+      rowsHtml += '<td>'+st.label+'</td>';
+      rowsHtml += '</tr>';
+    });
+
+    const html = '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Products List</title>' +
+      '<style>' +
+      'body{font-family:Arial,sans-serif;padding:24px;color:#1E2A28;}' +
+      'h1{font-size:22px;margin-bottom:2px;}' +
+      '.sub{font-size:12px;color:#555;margin-bottom:16px;}' +
+      'table{width:100%;border-collapse:collapse;font-size:13px;}' +
+      'th{text-align:left;border-bottom:2px solid #000;padding:6px 4px;}' +
+      'td{border-bottom:1px solid #ccc;padding:6px 4px;}' +
+      '</style></head><body>' +
+      '<h1>Sehat Pharmacy — Products List</h1>' +
+      '<p class="sub">Print Date: '+todayISO()+'</p>' +
+      '<table><thead><tr><th>#</th><th>Product Name</th><th>Quantity</th><th>Expiry Date</th><th>Status</th></tr></thead>' +
+      '<tbody>'+rowsHtml+'</tbody></table></body></html>';
+
+    const win = window.open('', '_blank');
+    if(!win){
+      alert('Please allow pop-ups for this page so the list can print.');
+      return;
+    }
+    win.document.open();
+    win.document.write(html);
+    win.document.close();
+    win.focus();
+    setTimeout(function(){ win.print(); }, 300);
+
+    downloadHtmlFile('products-list-' + todayISO() + '.html', html);
+  }
+
+  // ---- Render ----
+  function getFiltered(){
+    const search = document.getElementById('searchInput').value.toLowerCase();
+    const sortKey = document.getElementById('sortSelect').value;
+    let list = products.filter(p => p.name.toLowerCase().includes(search));
+    if(sortKey === 'expiry') list.sort((a,b) => new Date(a.expiry) - new Date(b.expiry));
+    else if(sortKey === 'name') list.sort((a,b) => a.name.localeCompare(b.name));
+    else if(sortKey === 'quantity') list.sort((a,b) => a.quantity - b.quantity);
+    return list;
+  }
+
+  function isLowStock(p){
+    const limit = (p.lowStock !== undefined && p.lowStock !== null) ? p.lowStock : 10;
+    return p.quantity <= limit;
+  }
+
+  function renderTable(){
+    const list = getFiltered();
+    const wrap = document.getElementById('tableWrap');
+    if(list.length === 0){
+      wrap.innerHTML = '<div class="empty-state">No products found. Add one from the "Add Product" tab.</div>';
+      return;
+    }
+    let html = '<table><thead><tr><th>Name</th><th>Quantity</th><th>Expiry</th><th>Status</th></tr></thead><tbody>';
+    list.forEach(p => {
+      const st = expiryStatus(p.expiry);
+      const low = isLowStock(p);
+      html += '<tr>';
+      html += '<td><div class="prod-name">'+escapeHtml(p.name)+'</div>' + (p.batch ? '<div class="prod-batch">Batch: '+escapeHtml(p.batch)+'</div>' : '') + '</td>';
+      html += '<td>'+p.quantity+(low ? ' <span class="badge" style="color:var(--red);background:var(--red-bg);">Low Stock</span>' : '')+'</td>';
+      html += '<td>'+p.expiry+'</td>';
+      html += '<td><span class="badge" style="'+badgeStyle(st.cls)+'">'+st.label+'</span></td>';
+      html += '</tr>';
+    });
+    html += '</tbody></table>';
+    wrap.innerHTML = html;
+  }
+
+  function renderStats(){
+    document.getElementById('statTotalProducts').textContent = products.length;
+    document.getElementById('statTotalQty').textContent = products.reduce((s,p)=>s+p.quantity,0);
+    document.getElementById('statNearExpiry').textContent = products.filter(p => daysUntil(p.expiry) <= 30).length;
+    document.getElementById('statLowStock').textContent = products.filter(p => isLowStock(p)).length;
+  }
+
+  function renderAll(){
+    renderStats();
+    renderTable();
+  }
+
+  // ---- Init ----
+  loadProducts();
+  renderAll();
+  document.getElementById('fExpiry').min = todayISO();
+</script>
+
+</body>
+</html>
