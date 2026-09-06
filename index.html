@@ -4,6 +4,14 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Sehat Pharmacy Manager</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#0F3D3A">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Sehat Pharmacy">
+<meta name="mobile-web-app-capable" content="yes">
 <style>
   :root{
     --teal-dark:#0F3D3A;
@@ -168,6 +176,7 @@
   </div>
   <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
     <span class="sync-badge connecting" id="syncBadge">🔄 Connecting...</span>
+    <button class="print-btn" id="installBtn" style="background:#E4572E;display:none;" onclick="installApp()">📲 Install App</button>
     <button class="print-btn" style="background:#3E6E7A;" onclick="exportBackup()">⬇️ Save Backup</button>
     <label class="print-btn" for="importFile" style="background:#3E6E7A;margin:0;">⬆️ Load Backup</label>
     <input type="file" id="importFile" accept=".json,application/json" style="position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0;" onchange="importBackup(event)">
@@ -1284,6 +1293,38 @@
   renderAll();
   document.getElementById('fExpiry').min = todayISO();
   initFirebase();
+
+  // ---- PWA Install ----
+  let deferredInstallPrompt = null;
+  window.addEventListener('beforeinstallprompt', function(e){
+    e.preventDefault();
+    deferredInstallPrompt = e;
+    document.getElementById('installBtn').style.display = 'inline-flex';
+  });
+  window.addEventListener('appinstalled', function(){
+    document.getElementById('installBtn').style.display = 'none';
+    deferredInstallPrompt = null;
+  });
+  function installApp(){
+    if(deferredInstallPrompt){
+      deferredInstallPrompt.prompt();
+      deferredInstallPrompt.userChoice.finally(function(){ deferredInstallPrompt = null; });
+    } else {
+      alert('To install: open this page in Chrome, tap the ⋮ menu, then "Add to Home screen" (Android) or "Install App" (Desktop). On iPhone/iPad: tap the Share icon, then "Add to Home Screen".');
+    }
+  }
+  if((window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || window.navigator.standalone){
+    // already running as installed app
+    document.getElementById('installBtn').style.display = 'none';
+  }
+
+  if('serviceWorker' in navigator){
+    window.addEventListener('load', function(){
+      navigator.serviceWorker.register('service-worker.js').catch(function(err){
+        console.error('Service worker registration failed:', err);
+      });
+    });
+  }
 </script>
 
 </body>
