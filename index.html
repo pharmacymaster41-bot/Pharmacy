@@ -134,7 +134,13 @@
   .cart-qty-input{ width:70px; border:1px solid #DAD4C8; border-radius:6px; padding:6px 8px; font-size:13px; }
   .bill-total-row{ font-weight:600; background:#F7F5F1; }
   .bill-name-field{ max-width:280px; margin-bottom:16px; }
+  .sync-badge{ font-size:11px; padding:3px 9px; border-radius:999px; display:inline-flex; align-items:center; gap:5px; }
+  .sync-badge.online{ color:var(--green); background:var(--green-bg); }
+  .sync-badge.offline{ color:var(--red); background:var(--red-bg); }
+  .sync-badge.connecting{ color:var(--amber); background:var(--amber-bg); }
 </style>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 </head>
 <body>
 
@@ -160,7 +166,8 @@
       <p>Stock, Sales &amp; Expiry Management</p>
     </div>
   </div>
-  <div style="display:flex;gap:8px;flex-wrap:wrap;">
+  <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+    <span class="sync-badge connecting" id="syncBadge">🔄 Connecting...</span>
     <button class="print-btn" style="background:#3E6E7A;" onclick="exportBackup()">⬇️ Save Backup</button>
     <label class="print-btn" for="importFile" style="background:#3E6E7A;margin:0;">⬆️ Load Backup</label>
     <input type="file" id="importFile" accept=".json,application/json" style="position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0;" onchange="importBackup(event)">
@@ -230,6 +237,15 @@
       </div>
       <button type="submit" class="btn-primary">➕ Add Product</button>
     </form>
+
+    <div style="margin-top:32px;padding-top:24px;border-top:1px solid var(--card-border);">
+      <h3 style="margin:0 0 4px;font-size:15px;">Manage Products</h3>
+      <p class="sub" style="margin:0 0 14px;font-size:12px;color:var(--muted);">Edit or delete an existing product</p>
+      <div class="search-box" style="margin-bottom:14px;">
+        🔎 <input type="text" id="manageSearchInput" placeholder="Search products..." oninput="renderManageList()">
+      </div>
+      <div id="manageListWrap"></div>
+    </div>
   </div>
 
   <!-- INVENTORY PANEL -->
@@ -256,6 +272,7 @@
       </div>
     </div>
     <div id="billTableWrap"></div>
+    <div id="billSummaryWrap"></div>
     <button class="btn-primary" style="margin-top:18px;" onclick="sellBillAndPrint()">🛒 Sell Selected Products</button>
   </div>
 
@@ -275,11 +292,67 @@
   </div>
 </div>
 
+<!-- EDIT PRODUCT MODAL -->
+<div class="modal-overlay" id="editModal">
+  <div class="modal" style="max-width:400px;">
+    <h3>Edit Product</h3>
+    <p class="sub">Update product details</p>
+    <div class="error-box" id="editError" style="display:none;"></div>
+    <div class="field">
+      <label>Product Name</label>
+      <input type="text" id="eName">
+    </div>
+    <div class="row-2">
+      <div class="field">
+        <label>Quantity</label>
+        <input type="number" id="eQty">
+      </div>
+      <div class="field">
+        <label>Expiry Date</label>
+        <input type="date" id="eExpiry">
+      </div>
+    </div>
+    <div class="row-2">
+      <div class="field">
+        <label>Price (optional)</label>
+        <input type="number" id="ePrice">
+      </div>
+      <div class="field">
+        <label>Batch No. (optional)</label>
+        <input type="text" id="eBatch">
+      </div>
+    </div>
+    <div class="field">
+      <label>Low Stock Limit (optional)</label>
+      <input type="number" id="eLowStock">
+    </div>
+    <div class="modal-actions">
+      <button class="btn-confirm" onclick="confirmEdit()">Save Changes</button>
+      <button class="btn-cancel" onclick="closeEditModal()">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- ADD PRODUCT LOCK MODAL -->
+<div class="modal-overlay" id="addLockModal">
+  <div class="modal" style="max-width:340px;text-align:center;">
+    <h3>Add Product Locked</h3>
+    <p class="sub">Enter PIN to add a new product</p>
+    <div class="error-box" id="addLockError" style="display:none;"></div>
+    <input type="password" id="addLockPinInput" placeholder="Enter PIN" style="width:100%;border:1px solid #DAD4C8;border-radius:8px;padding:10px 12px;font-size:14px;outline:none;text-align:center;" onkeydown="if(event.key==='Enter') checkAddLockPin()">
+    <div class="modal-actions">
+      <button class="btn-confirm" onclick="checkAddLockPin()">Unlock</button>
+      <button class="btn-cancel" onclick="closeAddLockModal()">Cancel</button>
+    </div>
+  </div>
+</div>
+
 </div>
 
 <script>
   // ---- Lock Screen ----
   const APP_PIN = 'Ahsan';
+  const ADD_PIN = 'Ahsan0099';
   function checkLockPin(){
     const input = document.getElementById('lockPinInput');
     const errBox = document.getElementById('lockError');
@@ -302,6 +375,78 @@
   let currentTab = 'inventory';
   let sellTargetId = null;
 
+  // ---- Firebase Setup ----
+  // Replace these values with YOUR OWN Firebase project config
+  // (Firebase Console -> Project Settings -> General -> Your apps -> Web app -> SDK setup)
+  const firebaseConfig = {
+    apiKey: "AIzaSyAm0P-nzRuDQHMAl--Eb1lfKAVJbD4tj70",
+    authDomain: "sehat-pharmacy-manager.firebaseapp.com",
+    projectId: "sehat-pharmacy-manager",
+    storageBucket: "sehat-pharmacy-manager.firebasestorage.app",
+    messagingSenderId: "559803993137",
+    appId: "1:559803993137:web:113a42459f6870427d9910"
+  };
+
+  let db = null;
+  let firebaseReady = false;
+  let applyingRemoteUpdate = false;
+  const FS_COLLECTION = 'pharmacy';
+  const FS_DOC = 'inventory';
+
+  function setSyncBadge(state){
+    const el = document.getElementById('syncBadge');
+    if(!el) return;
+    el.classList.remove('online','offline','connecting');
+    if(state === 'online'){
+      el.classList.add('online');
+      el.textContent = '🟢 Live Synced';
+    } else if(state === 'offline'){
+      el.classList.add('offline');
+      el.textContent = '🔴 Offline (Local Only)';
+    } else {
+      el.classList.add('connecting');
+      el.textContent = '🔄 Connecting...';
+    }
+  }
+
+  function initFirebase(){
+    try{
+      if(firebaseConfig.apiKey === 'YOUR_API_KEY'){
+        // Not configured yet — run in local-only mode
+        setSyncBadge('offline');
+        return;
+      }
+      firebase.initializeApp(firebaseConfig);
+      db = firebase.firestore();
+      firebaseReady = true;
+
+      db.collection(FS_COLLECTION).doc(FS_DOC).onSnapshot(function(doc){
+        if(doc.exists){
+          const data = doc.data();
+          if(data && Array.isArray(data.products)){
+            applyingRemoteUpdate = true;
+            products = data.products;
+            localStorage.setItem('pharmacy_products', JSON.stringify(products));
+            renderAll();
+            if(currentTab === 'bill') renderBillPanel();
+            if(currentTab === 'add') renderManageList();
+            applyingRemoteUpdate = false;
+          }
+        } else {
+          // First time ever — push whatever we have locally to the cloud
+          db.collection(FS_COLLECTION).doc(FS_DOC).set({ products: products, updatedAt: Date.now() });
+        }
+        setSyncBadge('online');
+      }, function(err){
+        console.error('Firebase sync error:', err);
+        setSyncBadge('offline');
+      });
+    }catch(e){
+      console.error('Firebase init error:', e);
+      setSyncBadge('offline');
+    }
+  }
+
   // ---- Persistence ----
   function loadProducts(){
     try{
@@ -311,6 +456,10 @@
   }
   function saveProducts(){
     localStorage.setItem('pharmacy_products', JSON.stringify(products));
+    if(firebaseReady && db && !applyingRemoteUpdate){
+      db.collection(FS_COLLECTION).doc(FS_DOC).set({ products: products, updatedAt: Date.now() })
+        .catch(err => console.error('Firebase save error:', err));
+    }
   }
 
   // ---- Helpers ----
@@ -341,6 +490,14 @@
 
   // ---- Tabs ----
   function switchTab(tab){
+    if(tab === 'add' && sessionStorage.getItem('pharmacy_add_unlocked') !== '1'){
+      openAddLockModal();
+      return;
+    }
+    activateTab(tab);
+  }
+
+  function activateTab(tab){
     currentTab = tab;
     document.getElementById('tabInventoryBtn').classList.toggle('active', tab==='inventory');
     document.getElementById('tabAddBtn').classList.toggle('active', tab==='add');
@@ -349,6 +506,32 @@
     document.getElementById('addPanel').style.display = tab==='add' ? 'block' : 'none';
     document.getElementById('billPanel').style.display = tab==='bill' ? 'block' : 'none';
     if(tab === 'bill') renderBillPanel();
+    if(tab === 'add') renderManageList();
+  }
+
+  // ---- Add Product Lock ----
+  function openAddLockModal(){
+    document.getElementById('addLockPinInput').value = '';
+    document.getElementById('addLockError').style.display = 'none';
+    document.getElementById('addLockModal').classList.add('open');
+    setTimeout(() => document.getElementById('addLockPinInput').focus(), 50);
+  }
+  function closeAddLockModal(){
+    document.getElementById('addLockModal').classList.remove('open');
+  }
+  function checkAddLockPin(){
+    const input = document.getElementById('addLockPinInput');
+    const errBox = document.getElementById('addLockError');
+    if(input.value === ADD_PIN){
+      sessionStorage.setItem('pharmacy_add_unlocked', '1');
+      closeAddLockModal();
+      activateTab('add');
+    } else {
+      errBox.textContent = 'Incorrect PIN. Try again.';
+      errBox.style.display = 'block';
+      input.value = '';
+      input.focus();
+    }
   }
 
   // ---- Add Product ----
@@ -394,9 +577,69 @@
   }
 
   function deleteProduct(id){
+    if(!confirm('Delete this product? This cannot be undone.')) return;
     products = products.filter(p => p.id !== id);
     saveProducts();
     renderAll();
+    renderManageList();
+  }
+
+  // ---- Edit Product ----
+  let editTargetId = null;
+  function openEditProduct(id){
+    const p = products.find(x => x.id === id);
+    if(!p) return;
+    editTargetId = id;
+    document.getElementById('eName').value = p.name;
+    document.getElementById('eQty').value = p.quantity;
+    document.getElementById('eExpiry').value = p.expiry;
+    document.getElementById('ePrice').value = (p.price !== null && p.price !== undefined) ? p.price : '';
+    document.getElementById('eBatch').value = p.batch || '';
+    document.getElementById('eLowStock').value = (p.lowStock !== null && p.lowStock !== undefined) ? p.lowStock : '';
+    document.getElementById('editError').style.display = 'none';
+    document.getElementById('editModal').classList.add('open');
+  }
+  function closeEditModal(){
+    document.getElementById('editModal').classList.remove('open');
+    editTargetId = null;
+  }
+  function confirmEdit(){
+    const p = products.find(x => x.id === editTargetId);
+    const errBox = document.getElementById('editError');
+    if(!p) return;
+
+    const name = document.getElementById('eName').value.trim();
+    const qtyRaw = document.getElementById('eQty').value;
+    const expiry = document.getElementById('eExpiry').value;
+    const priceRaw = document.getElementById('ePrice').value;
+    const batch = document.getElementById('eBatch').value.trim();
+    const lowStockRaw = document.getElementById('eLowStock').value;
+
+    if(!name || !qtyRaw || !expiry){
+      errBox.textContent = 'Name, Quantity and Expiry Date are required.';
+      errBox.style.display = 'block';
+      return;
+    }
+    const qty = parseInt(qtyRaw, 10);
+    if(isNaN(qty) || qty < 0){
+      errBox.textContent = 'Quantity must be a valid number.';
+      errBox.style.display = 'block';
+      return;
+    }
+    let lowStock = lowStockRaw ? parseInt(lowStockRaw, 10) : 10;
+    if(isNaN(lowStock) || lowStock < 0) lowStock = 10;
+
+    p.name = name;
+    p.quantity = qty;
+    p.expiry = expiry;
+    p.price = priceRaw ? parseFloat(priceRaw) : null;
+    p.batch = batch;
+    p.lowStock = lowStock;
+
+    saveProducts();
+    closeEditModal();
+    renderAll();
+    renderManageList();
   }
 
   // ---- Sell ----
@@ -450,7 +693,8 @@
     URL.revokeObjectURL(url);
   }
 
-  function printReceipt(items){
+  function printReceipt(items, discount){
+    discount = discount || 0;
     let rowsHtml = '';
     let total = 0;
     let hasPrice = false;
@@ -466,7 +710,20 @@
       rowsHtml += '<td style="text-align:right;">'+(subtotal!==null ? subtotal.toFixed(2) : '-')+'</td>';
       rowsHtml += '</tr>';
     });
-    const totalText = hasPrice ? ('Rs. ' + total.toFixed(2)) : '-';
+    const finalTotal = Math.max(total - discount, 0);
+    const subtotalText = hasPrice ? ('Rs. ' + total.toFixed(2)) : '-';
+    const discountText = 'Rs. ' + discount.toFixed(2);
+    const finalTotalText = hasPrice ? ('Rs. ' + finalTotal.toFixed(2)) : '-';
+
+    let footerHtml = '';
+    if(discount > 0 && hasPrice){
+      footerHtml =
+        '<tr><td colspan="4" style="text-align:right;">Subtotal</td><td style="text-align:right;">'+subtotalText+'</td></tr>' +
+        '<tr><td colspan="4" style="text-align:right;">Discount</td><td style="text-align:right;">- '+discountText+'</td></tr>' +
+        '<tr><td colspan="4" style="text-align:right;font-size:15px;">Total</td><td style="text-align:right;font-size:15px;">'+finalTotalText+'</td></tr>';
+    } else {
+      footerHtml = '<tr><td colspan="4" style="text-align:right;">Total</td><td style="text-align:right;">'+finalTotalText+'</td></tr>';
+    }
 
     const html = '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Sales Receipt</title>' +
       '<style>' +
@@ -483,7 +740,7 @@
       '<p class="sub">Date: '+todayISO()+'&nbsp;&nbsp;&nbsp;Time: '+new Date().toLocaleTimeString()+'</p>' +
       '<table><thead><tr><th>#</th><th>Product</th><th style="text-align:right;">Qty</th><th style="text-align:right;">Price</th><th style="text-align:right;">Subtotal</th></tr></thead>' +
       '<tbody>'+rowsHtml+'</tbody>' +
-      '<tfoot><tr><td colspan="4" style="text-align:right;">Total</td><td style="text-align:right;">'+totalText+'</td></tr></tfoot>' +
+      '<tfoot>'+footerHtml+'</tfoot>' +
       '</table></body></html>';
 
     const win = window.open('', '_blank');
@@ -560,6 +817,7 @@
 
   // ---- Bill / Multi-Sell ----
   let cartQuantities = {};
+  let billDiscount = 0;
 
   function renderBillPanel(){
     const wrap = document.getElementById('billTableWrap');
@@ -574,17 +832,50 @@
       wrap.innerHTML = '<div class="empty-state">No products found.</div>';
       return;
     }
-    let html = '<table><thead><tr><th>Name</th><th>Stock</th><th>Sell Qty</th></tr></thead><tbody>';
+    let html = '<table><thead><tr><th>Name</th><th>Stock</th><th>Price</th><th>Sell Qty</th></tr></thead><tbody>';
     list.forEach(p => {
       const savedQty = cartQuantities[p.id] || 0;
+      const priceText = (p.price !== null && p.price !== undefined) ? ('Rs. ' + p.price) : '-';
       html += '<tr>';
       html += '<td><div class="prod-name">'+escapeHtml(p.name)+'</div></td>';
       html += '<td>'+p.quantity+'</td>';
-      html += '<td><input type="number" class="cart-qty-input" min="0" max="'+p.quantity+'" value="'+savedQty+'" id="cartQty_'+p.id+'" onchange="cartQuantities[\''+p.id+'\']=this.value" '+(p.quantity===0?'disabled':'')+'></td>';
+      html += '<td>'+priceText+'</td>';
+      html += '<td><input type="number" class="cart-qty-input" min="0" max="'+p.quantity+'" value="'+savedQty+'" id="cartQty_'+p.id+'" oninput="cartQuantities[\''+p.id+'\']=this.value; renderBillSummary();" '+(p.quantity===0?'disabled':'')+'></td>';
       html += '</tr>';
     });
     html += '</tbody></table>';
     wrap.innerHTML = html;
+    renderBillSummary();
+  }
+
+  function calcCartSubtotal(){
+    let subtotal = 0;
+    products.forEach(p => {
+      const qty = parseInt(cartQuantities[p.id], 10) || 0;
+      if(qty > 0 && p.price !== null && p.price !== undefined){
+        subtotal += qty * p.price;
+      }
+    });
+    return subtotal;
+  }
+
+  function renderBillSummary(){
+    const wrap = document.getElementById('billSummaryWrap');
+    if(!wrap) return;
+    const subtotal = calcCartSubtotal();
+    const discount = billDiscount || 0;
+    const total = Math.max(subtotal - discount, 0);
+    wrap.innerHTML =
+      '<div class="row-2" style="align-items:end;margin-top:16px;">' +
+        '<div class="field" style="margin-bottom:0;">' +
+          '<label>Discount (Rs.)</label>' +
+          '<input type="number" min="0" id="billDiscountInput" value="'+(discount || '')+'" placeholder="0" oninput="billDiscount=parseFloat(this.value)||0; renderBillSummary();">' +
+        '</div>' +
+        '<div class="field" style="margin-bottom:0;text-align:right;">' +
+          '<div style="font-size:13px;color:var(--muted);margin-bottom:4px;">Subtotal: Rs. '+subtotal.toFixed(2)+'</div>' +
+          '<div style="font-size:18px;font-weight:600;color:var(--teal-dark);">Total: Rs. '+total.toFixed(2)+'</div>' +
+        '</div>' +
+      '</div>';
   }
 
   function sellBillAndPrint(){
@@ -616,10 +907,12 @@
     });
     saveProducts();
 
+    const discount = billDiscount || 0;
     cartQuantities = {};
+    billDiscount = 0;
     renderAll();
     renderBillPanel();
-    printReceipt(items);
+    printReceipt(items, discount);
   }
 
   function printInventory(){
@@ -680,6 +973,37 @@
     return p.quantity <= limit;
   }
 
+  function renderManageList(){
+    const wrap = document.getElementById('manageListWrap');
+    if(!wrap) return;
+    const searchEl = document.getElementById('manageSearchInput');
+    const search = searchEl ? searchEl.value.toLowerCase() : '';
+    const list = products.filter(p => p.name.toLowerCase().includes(search));
+
+    if(products.length === 0){
+      wrap.innerHTML = '<div class="empty-state">No products yet.</div>';
+      return;
+    }
+    if(list.length === 0){
+      wrap.innerHTML = '<div class="empty-state">No products found.</div>';
+      return;
+    }
+    let html = '<table><thead><tr><th>Name</th><th>Quantity</th><th>Expiry</th><th></th></tr></thead><tbody>';
+    list.forEach(p => {
+      html += '<tr>';
+      html += '<td><div class="prod-name">'+escapeHtml(p.name)+'</div>' + (p.batch ? '<div class="prod-batch">Batch: '+escapeHtml(p.batch)+'</div>' : '') + '</td>';
+      html += '<td>'+p.quantity+'</td>';
+      html += '<td>'+p.expiry+'</td>';
+      html += '<td><div class="actions">';
+      html += '<button class="btn-sell" style="background:#3E6E7A;" onclick="openEditProduct(\''+p.id+'\')">✏️ Edit</button>';
+      html += '<button class="btn-del" onclick="deleteProduct(\''+p.id+'\')">🗑️</button>';
+      html += '</div></td>';
+      html += '</tr>';
+    });
+    html += '</tbody></table>';
+    wrap.innerHTML = html;
+  }
+
   function renderTable(){
     const list = getFiltered();
     const wrap = document.getElementById('tableWrap');
@@ -687,7 +1011,7 @@
       wrap.innerHTML = '<div class="empty-state">No products found. Add one from the "Add Product" tab.</div>';
       return;
     }
-    let html = '<table><thead><tr><th>Name</th><th>Quantity</th><th>Expiry</th><th>Status</th></tr></thead><tbody>';
+    let html = '<table><thead><tr><th>Name</th><th>Quantity</th><th>Expiry</th><th>Status</th><th></th></tr></thead><tbody>';
     list.forEach(p => {
       const st = expiryStatus(p.expiry);
       const low = isLowStock(p);
@@ -696,6 +1020,9 @@
       html += '<td>'+p.quantity+(low ? ' <span class="badge" style="color:var(--red);background:var(--red-bg);">Low Stock</span>' : '')+'</td>';
       html += '<td>'+p.expiry+'</td>';
       html += '<td><span class="badge" style="'+badgeStyle(st.cls)+'">'+st.label+'</span></td>';
+      html += '<td><div class="actions">';
+      html += '<button class="btn-sell" '+(p.quantity===0?'disabled':'')+' onclick="openSell(\''+p.id+'\')">🛒 Sell</button>';
+      html += '</div></td>';
       html += '</tr>';
     });
     html += '</tbody></table>';
@@ -718,6 +1045,7 @@
   loadProducts();
   renderAll();
   document.getElementById('fExpiry').min = todayISO();
+  initFirebase();
 </script>
 
 </body>
