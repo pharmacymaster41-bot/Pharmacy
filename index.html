@@ -201,6 +201,7 @@
     <button class="tab-btn active" id="tabInventoryBtn" onclick="switchTab('inventory')">Inventory</button>
     <button class="tab-btn" id="tabAddBtn" onclick="switchTab('add')">Add Product</button>
     <button class="tab-btn" id="tabBillBtn" onclick="switchTab('bill')">Sell Products</button>
+    <button class="tab-btn" id="tabHistoryBtn" onclick="switchTab('history')">History</button>
   </div>
 
   <!-- ADD PRODUCT PANEL -->
@@ -246,6 +247,12 @@
       </div>
       <div id="manageListWrap"></div>
     </div>
+
+    <div style="margin-top:32px;padding-top:24px;border-top:1px solid var(--card-border);">
+      <h3 style="margin:0 0 4px;font-size:15px;">Sales History</h3>
+      <p class="sub" style="margin:0 0 14px;font-size:12px;color:var(--muted);">Permanently erase all recorded sales history (cannot be undone)</p>
+      <button class="btn-del" style="width:auto;padding:10px 16px;font-size:14px;" onclick="clearHistory()">🗑️ Clear History</button>
+    </div>
   </div>
 
   <!-- INVENTORY PANEL -->
@@ -266,6 +273,7 @@
   <!-- BILL PANEL -->
   <div class="panel" id="billPanel" style="display:none;">
     <div class="error-box" id="billError" style="display:none;"></div>
+    <div id="billSelectedWrap"></div>
     <div class="toolbar">
       <div class="search-box">
         🔎 <input type="text" id="billSearchInput" placeholder="Search products..." oninput="renderBillPanel()">
@@ -274,6 +282,17 @@
     <div id="billTableWrap"></div>
     <div id="billSummaryWrap"></div>
     <button class="btn-primary" style="margin-top:18px;" onclick="sellBillAndPrint()">🛒 Sell Selected Products</button>
+  </div>
+
+  <!-- HISTORY PANEL -->
+  <div class="panel" id="historyPanel" style="display:none;">
+    <div class="toolbar">
+      <div class="search-box">
+        🔎 <input type="text" id="historySearchInput" placeholder="Search by product name..." oninput="renderHistory()">
+      </div>
+      <button class="btn-primary" style="width:auto;padding:10px 16px;" onclick="printHistory()">🖨️ Print Report</button>
+    </div>
+    <div id="historyListWrap"></div>
   </div>
 
 </div>
@@ -390,8 +409,10 @@
   let db = null;
   let firebaseReady = false;
   let applyingRemoteUpdate = false;
+  let applyingRemoteHistoryUpdate = false;
   const FS_COLLECTION = 'pharmacy';
   const FS_DOC = 'inventory';
+  const FS_DOC_HISTORY = 'salesHistory';
 
   function setSyncBadge(state){
     const el = document.getElementById('syncBadge');
@@ -441,6 +462,23 @@
         console.error('Firebase sync error:', err);
         setSyncBadge('offline');
       });
+
+      db.collection(FS_COLLECTION).doc(FS_DOC_HISTORY).onSnapshot(function(doc){
+        if(doc.exists){
+          const data = doc.data();
+          if(data && Array.isArray(data.records)){
+            applyingRemoteHistoryUpdate = true;
+            salesHistory = data.records;
+            localStorage.setItem('pharmacy_sales_history', JSON.stringify(salesHistory));
+            if(currentTab === 'history') renderHistory();
+            applyingRemoteHistoryUpdate = false;
+          }
+        } else {
+          db.collection(FS_COLLECTION).doc(FS_DOC_HISTORY).set({ records: salesHistory, updatedAt: Date.now() });
+        }
+      }, function(err){
+        console.error('Firebase history sync error:', err);
+      });
     }catch(e){
       console.error('Firebase init error:', e);
       setSyncBadge('offline');
@@ -460,6 +498,162 @@
       db.collection(FS_COLLECTION).doc(FS_DOC).set({ products: products, updatedAt: Date.now() })
         .catch(err => console.error('Firebase save error:', err));
     }
+  }
+
+  // ---- Sales History ----
+  let salesHistory = [];
+  function loadHistory(){
+    try{
+      const raw = localStorage.getItem('pharmacy_sales_history');
+      salesHistory = raw ? JSON.parse(raw) : [];
+    }catch(e){ salesHistory = []; }
+  }
+  function saveHistory(){
+    localStorage.setItem('pharmacy_sales_history', JSON.stringify(salesHistory));
+    if(firebaseReady && db && !applyingRemoteHistoryUpdate){
+      db.collection(FS_COLLECTION).doc(FS_DOC_HISTORY).set({ records: salesHistory, updatedAt: Date.now() })
+        .catch(err => console.error('Firebase history save error:', err));
+    }
+  }
+  function clearHistory(){
+    if(salesHistory.length === 0){
+      alert('Sales history is already empty.');
+      return;
+    }
+    if(!confirm('Delete ALL sales history? This cannot be undone.')) return;
+    salesHistory = [];
+    saveHistory();
+    if(currentTab === 'history') renderHistory();
+    alert('Sales history cleared.');
+  }
+  function recordSale(items, discount){
+    const total = items.reduce((sum, it) => sum + ((it.price || 0) * it.qty), 0) - (discount || 0);
+    salesHistory.unshift({
+      id: Date.now().toString(36) + Math.random().toString(36).slice(2,6),
+      timestamp: Date.now(),
+      items: items.map(it => ({ name: it.name, qty: it.qty, price: it.price })),
+      discount: discount || 0,
+      total: Math.max(total, 0)
+    });
+    saveHistory();
+  }
+
+  function renderHistory(){
+    const wrap = document.getElementById('historyListWrap');
+    if(!wrap) return;
+    const searchEl = document.getElementById('historySearchInput');
+    const search = searchEl ? searchEl.value.toLowerCase() : '';
+    const list = search
+      ? salesHistory.filter(h => h.items.some(it => it.name.toLowerCase().includes(search)))
+      : salesHistory;
+
+    if(salesHistory.length === 0){
+      wrap.innerHTML = '<div class="empty-state">No sales recorded yet.</div>';
+      return;
+    }
+    if(list.length === 0){
+      wrap.innerHTML = '<div class="empty-state">No matching sales found.</div>';
+      return;
+    }
+    let html = '';
+    list.forEach(h => {
+      const d = new Date(h.timestamp);
+      const dateStr = d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+      let itemsHtml = h.items.map(it =>
+        '<div style="display:flex;justify-content:space-between;font-size:13px;padding:3px 0;">' +
+          '<span>' + escapeHtml(it.name) + ' &times; ' + it.qty + '</span>' +
+          '<span>' + (it.price !== null && it.price !== undefined ? 'Rs. ' + (it.price * it.qty).toFixed(2) : '-') + '</span>' +
+        '</div>'
+      ).join('');
+      html +=
+        '<div style="background:#fff;border:1px solid var(--card-border);border-radius:10px;padding:14px;margin-bottom:12px;">' +
+          '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">' +
+            '<span style="font-size:12px;color:var(--muted);">🕒 ' + dateStr + '</span>' +
+            '<span style="font-weight:600;color:var(--teal-dark);">Rs. ' + h.total.toFixed(2) + '</span>' +
+          '</div>' +
+          itemsHtml +
+          (h.discount > 0 ? '<div style="font-size:12px;color:var(--red);margin-top:4px;">Discount: - Rs. ' + h.discount.toFixed(2) + '</div>' : '') +
+        '</div>';
+    });
+    wrap.innerHTML = html;
+  }
+
+  function printHistory(){
+    const searchEl = document.getElementById('historySearchInput');
+    const search = searchEl ? searchEl.value.toLowerCase() : '';
+    const list = search
+      ? salesHistory.filter(h => h.items.some(it => it.name.toLowerCase().includes(search)))
+      : salesHistory;
+
+    if(list.length === 0){
+      alert('No sales history to print.');
+      return;
+    }
+
+    // Aggregate totals per product
+    const agg = {};
+    list.forEach(h => {
+      h.items.forEach(it => {
+        if(!agg[it.name]) agg[it.name] = { qty: 0, amount: 0 };
+        agg[it.name].qty += it.qty;
+        if(it.price !== null && it.price !== undefined) agg[it.name].amount += it.price * it.qty;
+      });
+    });
+    const aggNames = Object.keys(agg).sort();
+
+    let grandTotal = 0;
+    let grandDiscount = 0;
+    list.forEach(h => { grandTotal += h.total; grandDiscount += (h.discount || 0); });
+
+    let summaryRows = '';
+    aggNames.forEach(name => {
+      summaryRows += '<tr><td>' + escapeHtml(name) + '</td><td style="text-align:right;">' + agg[name].qty + '</td><td style="text-align:right;">Rs. ' + agg[name].amount.toFixed(2) + '</td></tr>';
+    });
+
+    let txnRows = '';
+    list.slice().reverse().forEach(h => {
+      const d = new Date(h.timestamp);
+      const dateStr = d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+      const itemsText = h.items.map(it => escapeHtml(it.name) + ' x' + it.qty).join(', ');
+      const discountText = h.discount > 0 ? ('Rs. ' + h.discount.toFixed(2)) : '-';
+      txnRows += '<tr><td>' + dateStr + '</td><td>' + itemsText + '</td><td style="text-align:right;">' + discountText + '</td><td style="text-align:right;">Rs. ' + h.total.toFixed(2) + '</td></tr>';
+    });
+
+    const html = '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Sales History Report</title>' +
+      '<style>' +
+      'body{font-family:Arial,sans-serif;padding:20px;color:#1E2A28;}' +
+      'h1{font-size:20px;margin:0 0 2px;}' +
+      'h2{font-size:15px;margin:24px 0 8px;}' +
+      '.sub{font-size:12px;color:#555;margin:0 0 4px;}' +
+      'table{width:100%;border-collapse:collapse;font-size:13px;margin-top:6px;}' +
+      'th{text-align:left;border-bottom:2px solid #000;padding:6px 4px;}' +
+      'td{border-bottom:1px solid #ccc;padding:6px 4px;}' +
+      '.grand{font-size:16px;font-weight:700;margin-top:18px;text-align:right;}' +
+      '.grand-sub{font-size:13px;font-weight:400;color:#555;margin-top:4px;text-align:right;}' +
+      '</style></head><body>' +
+      '<h1>Sehat Pharmacy</h1>' +
+      '<p class="sub">Sales History Report</p>' +
+      '<p class="sub">Generated: ' + new Date().toLocaleString() + '</p>' +
+      '<h2>Products Sold (Summary)</h2>' +
+      '<table><thead><tr><th>Product</th><th style="text-align:right;">Qty Sold</th><th style="text-align:right;">Amount</th></tr></thead><tbody>' + summaryRows + '</tbody></table>' +
+      '<h2>Transaction Log</h2>' +
+      '<table><thead><tr><th>Date/Time</th><th>Items</th><th style="text-align:right;">Discount</th><th style="text-align:right;">Total</th></tr></thead><tbody>' + txnRows + '</tbody></table>' +
+      '<div class="grand-sub">Total Discounts Given: Rs. ' + grandDiscount.toFixed(2) + '</div>' +
+      '<div class="grand">Total Payment Received: Rs. ' + grandTotal.toFixed(2) + '</div>' +
+      '</body></html>';
+
+    const win = window.open('', '_blank');
+    if(!win){
+      alert('Please allow pop-ups for this page so the report can print.');
+      return;
+    }
+    win.document.open();
+    win.document.write(html);
+    win.document.close();
+    win.focus();
+    setTimeout(function(){ win.print(); }, 300);
+
+    downloadHtmlFile('sales-history-' + todayISO() + '-' + Date.now() + '.html', html);
   }
 
   // ---- Helpers ----
@@ -502,11 +696,14 @@
     document.getElementById('tabInventoryBtn').classList.toggle('active', tab==='inventory');
     document.getElementById('tabAddBtn').classList.toggle('active', tab==='add');
     document.getElementById('tabBillBtn').classList.toggle('active', tab==='bill');
+    document.getElementById('tabHistoryBtn').classList.toggle('active', tab==='history');
     document.getElementById('inventoryPanel').style.display = tab==='inventory' ? 'block' : 'none';
     document.getElementById('addPanel').style.display = tab==='add' ? 'block' : 'none';
     document.getElementById('billPanel').style.display = tab==='bill' ? 'block' : 'none';
+    document.getElementById('historyPanel').style.display = tab==='history' ? 'block' : 'none';
     if(tab === 'bill') renderBillPanel();
     if(tab === 'add') renderManageList();
+    if(tab === 'history') renderHistory();
   }
 
   // ---- Add Product Lock ----
@@ -676,6 +873,7 @@
     saveProducts();
     closeSellModal();
     renderAll();
+    recordSale([{ name: p.name, qty: qty, price: p.price }], 0);
     printReceipt([{ name: p.name, qty: qty, price: p.price }]);
   }
 
@@ -727,13 +925,17 @@
 
     const html = '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Sales Receipt</title>' +
       '<style>' +
-      'body{font-family:Arial,sans-serif;padding:24px;color:#1E2A28;}' +
-      'h1{font-size:20px;margin:0 0 2px;}' +
-      '.sub{font-size:12px;color:#555;margin:0 0 4px;}' +
-      'table{width:100%;border-collapse:collapse;font-size:13px;margin-top:16px;}' +
-      'th{text-align:left;border-bottom:2px solid #000;padding:6px 4px;}' +
-      'td{border-bottom:1px solid #ccc;padding:6px 4px;}' +
-      'tfoot td{font-weight:600;border-bottom:none;}' +
+      '@page{ size:80mm auto; margin:2mm; }' +
+      '*{ box-sizing:border-box; }' +
+      'html,body{ width:100%; margin:0; }' +
+      'body{font-family:Arial,sans-serif;padding:4mm 2mm;color:#000;font-size:12px;}' +
+      'h1{font-size:16px;margin:0 0 2px;text-align:center;}' +
+      '.sub{font-size:11px;color:#333;margin:0 0 3px;text-align:center;}' +
+      'table{width:100%;border-collapse:collapse;font-size:11px;margin-top:10px;}' +
+      'th{text-align:left;border-bottom:1px dashed #000;padding:4px 2px;}' +
+      'td{border-bottom:1px dashed #999;padding:4px 2px;word-break:break-word;}' +
+      'tfoot td{font-weight:700;border-bottom:none;border-top:1px dashed #000;}' +
+      '@media print{ body{ -webkit-print-color-adjust:exact; } }' +
       '</style></head><body>' +
       '<h1>Sehat Pharmacy</h1>' +
       '<p class="sub">Sales Receipt</p>' +
@@ -820,6 +1022,7 @@
   let billDiscount = 0;
 
   function renderBillPanel(){
+    renderBillSelected();
     const wrap = document.getElementById('billTableWrap');
     const search = document.getElementById('billSearchInput').value.toLowerCase();
     const list = products.filter(p => p.name.toLowerCase().includes(search));
@@ -840,12 +1043,35 @@
       html += '<td><div class="prod-name">'+escapeHtml(p.name)+'</div></td>';
       html += '<td>'+p.quantity+'</td>';
       html += '<td>'+priceText+'</td>';
-      html += '<td><input type="number" class="cart-qty-input" min="0" max="'+p.quantity+'" value="'+savedQty+'" id="cartQty_'+p.id+'" oninput="cartQuantities[\''+p.id+'\']=this.value; renderBillSummary();" '+(p.quantity===0?'disabled':'')+'></td>';
+      html += '<td><input type="number" class="cart-qty-input" min="0" max="'+p.quantity+'" value="'+savedQty+'" id="cartQty_'+p.id+'" oninput="cartQuantities[\''+p.id+'\']=this.value; renderBillSummary(); renderBillSelected();" '+(p.quantity===0?'disabled':'')+'></td>';
       html += '</tr>';
     });
     html += '</tbody></table>';
     wrap.innerHTML = html;
     renderBillSummary();
+  }
+
+  function renderBillSelected(){
+    const wrap = document.getElementById('billSelectedWrap');
+    if(!wrap) return;
+    const selected = products.filter(p => (parseInt(cartQuantities[p.id], 10) || 0) > 0);
+    if(selected.length === 0){
+      wrap.innerHTML = '';
+      return;
+    }
+    let html = '<div style="background:#F7F5F1;border:1px solid var(--card-border);border-radius:10px;padding:12px 14px;margin-bottom:16px;">';
+    html += '<div style="font-size:12px;font-weight:600;color:var(--muted);margin-bottom:8px;">SELECTED PRODUCTS</div>';
+    selected.forEach(p => {
+      const qty = cartQuantities[p.id];
+      const priceText = (p.price !== null && p.price !== undefined) ? ('Rs. ' + p.price) : '-';
+      html += '<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--card-border);">';
+      html += '<div style="flex:1;min-width:0;"><div class="prod-name">'+escapeHtml(p.name)+'</div><div style="font-size:11px;color:var(--muted);">Stock: '+p.quantity+' &middot; '+priceText+'</div></div>';
+      html += '<input type="number" class="cart-qty-input" style="width:70px;" min="0" max="'+p.quantity+'" value="'+qty+'" onchange="cartQuantities[\''+p.id+'\']=this.value; renderBillPanel();">';
+      html += '<button class="btn-del" onclick="cartQuantities[\''+p.id+'\']=0; renderBillPanel();">✕</button>';
+      html += '</div>';
+    });
+    html += '</div>';
+    wrap.innerHTML = html;
   }
 
   function calcCartSubtotal(){
@@ -859,12 +1085,21 @@
     return subtotal;
   }
 
-  function renderBillSummary(){
+  function renderBillSummary(forceRebuild){
     const wrap = document.getElementById('billSummaryWrap');
     if(!wrap) return;
     const subtotal = calcCartSubtotal();
     const discount = billDiscount || 0;
     const total = Math.max(subtotal - discount, 0);
+
+    const existingInput = document.getElementById('billDiscountInput');
+    if(existingInput && !forceRebuild){
+      // Update totals only — don't rebuild the input, or the user loses focus/cursor while typing
+      document.getElementById('billSubtotalText').textContent = 'Subtotal: Rs. ' + subtotal.toFixed(2);
+      document.getElementById('billTotalText').textContent = 'Total: Rs. ' + total.toFixed(2);
+      return;
+    }
+
     wrap.innerHTML =
       '<div class="row-2" style="align-items:end;margin-top:16px;">' +
         '<div class="field" style="margin-bottom:0;">' +
@@ -872,8 +1107,8 @@
           '<input type="number" min="0" id="billDiscountInput" value="'+(discount || '')+'" placeholder="0" oninput="billDiscount=parseFloat(this.value)||0; renderBillSummary();">' +
         '</div>' +
         '<div class="field" style="margin-bottom:0;text-align:right;">' +
-          '<div style="font-size:13px;color:var(--muted);margin-bottom:4px;">Subtotal: Rs. '+subtotal.toFixed(2)+'</div>' +
-          '<div style="font-size:18px;font-weight:600;color:var(--teal-dark);">Total: Rs. '+total.toFixed(2)+'</div>' +
+          '<div id="billSubtotalText" style="font-size:13px;color:var(--muted);margin-bottom:4px;">Subtotal: Rs. '+subtotal.toFixed(2)+'</div>' +
+          '<div id="billTotalText" style="font-size:18px;font-weight:600;color:var(--teal-dark);">Total: Rs. '+total.toFixed(2)+'</div>' +
         '</div>' +
       '</div>';
   }
@@ -912,6 +1147,8 @@
     billDiscount = 0;
     renderAll();
     renderBillPanel();
+    renderBillSummary(true);
+    recordSale(items, discount);
     printReceipt(items, discount);
   }
 
@@ -1043,6 +1280,7 @@
 
   // ---- Init ----
   loadProducts();
+  loadHistory();
   renderAll();
   document.getElementById('fExpiry').min = todayISO();
   initFirebase();
